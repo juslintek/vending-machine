@@ -1,46 +1,64 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Model;
+
+use App\Generator\Generator;
 
 class VendingMachine
 {
-    private $inventory;
-    private $cashReserve;
+    private array $inventory;
+    private array $cashReserve;
 
-    public function __construct(array $inventory, array $cashReserve)
+    public function __construct(array $inventory, array|Generator $cashReserve)
     {
         $this->inventory = $inventory;
-        $this->cashReserve = $cashReserve;
+        $this->cashReserve = $cashReserve instanceof Generator ? $cashReserve->generate() : $cashReserve;
     }
 
-    public function purchaseItem(string $itemName, array $payment)
+    public function purchaseItem(string $itemName, array $payment): array
     {
         if (!isset($this->inventory[$itemName])) {
-            throw new \Exception("Item not available");
+            throw new \RuntimeException("Item not available");
         }
         $itemPrice = $this->inventory[$itemName];
         $totalPayment = array_sum($payment);
 
         if ($totalPayment < $itemPrice) {
-            throw new \Exception("Insufficient payment");
+            throw new \RuntimeException("Insufficient payment");
         }
 
         $changeAmount = $totalPayment - $itemPrice;
+
         $change = $this->calculateChange($changeAmount);
         if ($change === null) {
-            throw new \Exception("Cannot provide change");
+            throw new \RuntimeException("Cannot provide change");
         }
 
         $this->updateCashReserve($payment, $change);
-        $this->inventory[$itemName]--; // Assuming each item is decremented by 1 per purchase
-
         return $change;
+    }
+
+    public function getInventory(): array
+    {
+        return $this->inventory;
+    }
+
+    public function getCacheReserve(): array
+    {
+        return $this->cashReserve;
     }
 
     private function calculateChange(int $amount): ?array
     {
         $change = [];
-        foreach ($this->cashReserve as $coin => $count) {
+
+        $cacheReserve = $this->getCacheReserve();
+
+        krsort($cacheReserve);
+
+        foreach ($cacheReserve as $coin => $count) {
             while ($amount >= $coin && $count > 0) {
                 $amount -= $coin;
                 $count--;
@@ -48,7 +66,7 @@ class VendingMachine
                     $change[$coin] = 0;
                 }
                 $change[$coin]++;
-                $this->cashReserve[$coin] = $count;
+                $cacheReserve[$coin] = $count;
             }
         }
 
